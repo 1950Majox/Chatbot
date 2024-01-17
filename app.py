@@ -1,5 +1,6 @@
 import streamlit as st
 from streamlit_chat import message
+from PIL import Image
 from langchain.chains import ConversationalRetrievalChain
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.llms import CTransformers
@@ -15,9 +16,30 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 import os
 from dotenv import load_dotenv
 import tempfile
+import base64
 
+
+
+def get_base64(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_background(png_file):
+    bin_str = get_base64(png_file)
+    page_bg_img = '''
+    <style>
+    .stApp {
+    background-image: url("data:image/png;base64,%s");
+    background-size: cover;
+    }
+    </style>
+    ''' % bin_str
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+set_background('5053309.jpg')
 
 load_dotenv()
+
 
 
 def initialize_session_state():
@@ -35,6 +57,7 @@ def conversation_chat(query, chain, history):
     history.append((query, result["answer"]))
     return result["answer"]
 
+
 def display_chat_history(chain):
     reply_container = st.container()
     container = st.container()
@@ -46,19 +69,23 @@ def display_chat_history(chain):
             submit_button = st.form_submit_button(label='PREGUNTAR')
 
         if submit_button and user_input:
-            with st.spinner('Generating response...'):
-                output = conversation_chat(user_input, chain, st.session_state['history'])
-
-            st.session_state['past'].append(user_input)
-            st.session_state['generated'].append(output)
+            if user_input.strip():  # Verifica si la pregunta no está en blanco
+                with st.spinner('Generando respuesta....'):
+                    output = conversation_chat(user_input, chain, st.session_state['history'])
+                    
+                st.session_state['past'].append(user_input)
+                st.session_state['generated'].append(output)
+            else:
+                # Muestra una pantalla emergente si la pregunta está en blanco
+                st.warning('¡Por favor, ingresa una pregunta!')
 
     if st.session_state['generated']:
         with reply_container:
             for i in range(len(st.session_state['generated'])):
-                message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', avatar_style="thumbs")
-                message(st.session_state["generated"][i], key=str(i), avatar_style="fun-emoji")
+                message(st.session_state["past"][i], is_user=True, key=str(i) + '_user', avatar_style="black")
+                message(st.session_state["generated"][i], avatar_style="black")
 
-
+##TENGO QUE ELIMINAR LOS AVATARES
 
 
 def create_conversational_chain(vector_store):
@@ -68,13 +95,9 @@ def create_conversational_chain(vector_store):
                         streaming=True, 
                         callbacks=[StreamingStdOutCallbackHandler()],
                         model_type="llama",
-                        config={'max_new_tokens': 500, 'temperature': 0.01})
+                        config={'max_new_tokens': 500, 'temperature': 0.2})
         
-    #llm = Replicate(
-     #   streaming = True,
-      #  model = "replicate/llama-2-70b-chat:58d078176e02c219e11eb4da5a02a7830a283b14cf8f94537af893ccff5ee781", 
-       # callbacks=[StreamingStdOutCallbackHandler()],
-        #input = {"temperature": 0.01, "max_length" :500,"top_p":1})
+    
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
     chain = ConversationalRetrievalChain.from_llm(llm=llm, chain_type='stuff',
@@ -86,10 +109,19 @@ def main():
     load_dotenv()
     # Initialize session state
     initialize_session_state()
-    st.title("ChatBot con Llama2- Chatea con tus documentos tipo PDF, docs :books:")
+    st.title("GOBIERNO AUTONOMO MUNICIPAL DE LA PAZ")
+    
+    st.markdown("<hr>", unsafe_allow_html=True)
+    
+    st.header("Chatea con tus documentos a través de llama2 tipo PDF, docs :books:")
+    
     # Initialize Streamlit
-    st.sidebar.title("Procesa aqui tus Documentos")
-    uploaded_files = st.sidebar.file_uploader("Upload files", accept_multiple_files=True)
+   # st.sidebar.title("Procesa aqui tus Documentos")
+    
+    
+  
+    #st.sidebar
+    uploaded_files = st.file_uploader("Subir archivos", accept_multiple_files=True)
 
 
     if uploaded_files:
@@ -112,9 +144,10 @@ def main():
                 text.extend(loader.load())
                 os.remove(temp_file_path)
 
-        text_splitter = CharacterTextSplitter(separator="\n", chunk_size=1000, chunk_overlap=100, length_function=len)
+        text_splitter = CharacterTextSplitter(separator="\n", chunk_size=800, chunk_overlap=100, length_function=len)
         text_chunks = text_splitter.split_documents(text)
-
+        
+        
         # Create embeddings
         embeddings = HuggingFaceEmbeddings(model_name="jaimevera1107/all-MiniLM-L6-v2-similarity-es", 
                                            model_kwargs={'device': 'cpu'})
@@ -131,5 +164,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
